@@ -57,8 +57,8 @@ function detectStore(urlStr) {
   return { name: 'Loja Online', code: 'outros', icon: '🏪' };
 }
 
-// Scrape product endpoint
-app.post('/api/scrape', async (req, res) => {
+// Scrape product endpoint (Supports both /api/scrape and /scrape on Vercel)
+app.post(['/api/scrape', '/scrape'], async (req, res) => {
   const { url } = req.body;
 
   if (!url || typeof url !== 'string') {
@@ -245,7 +245,7 @@ app.post('/api/scrape', async (req, res) => {
 });
 
 // Endpoint to generate official short affiliate link (meli.la) via Mercado Livre cURL session
-app.post('/api/affiliate/shorten', async (req, res) => {
+app.post(['/api/affiliate/shorten', '/affiliate/shorten'], async (req, res) => {
   const { url, cookie, csrfToken, tag } = req.body;
 
   if (!url || typeof url !== 'string') {
@@ -325,8 +325,8 @@ app.post('/api/affiliate/shorten', async (req, res) => {
   });
 });
 
-// AI route dedicated exclusively to Google Gemini (3.6 Flash)
-app.post('/api/generate-ai', async (req, res) => {
+// AI route dedicated exclusively to Google Gemini
+app.post(['/api/generate-ai', '/generate-ai'], async (req, res) => {
   const { apiKey, action, productData, customPrompt } = req.body;
 
   if (!apiKey) {
@@ -406,7 +406,7 @@ Responda APENAS com o texto do gancho de até 10 palavras com 1 ou 2 emojis adeq
 });
 
 // Search and track deals endpoint
-app.post('/api/deals/search', async (req, res) => {
+app.post(['/api/deals/search', '/deals/search'], async (req, res) => {
   const { query, niche, store = 'mercadolivre', minDiscount = 10 } = req.body;
   const rawQuery = (query || '').toLowerCase().trim();
   const minDiscNum = Number(minDiscount) || 10;
