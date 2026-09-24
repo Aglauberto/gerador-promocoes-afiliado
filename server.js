@@ -14,13 +14,25 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-const AXIOS_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-  'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-  'Cache-Control': 'no-cache',
-  'Pragma': 'no-cache',
-};
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+];
+
+function getAxiosHeaders() {
+  const randomUa = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+  return {
+    'User-Agent': randomUa,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+  };
+}
+
+const AXIOS_HEADERS = getAxiosHeaders();
 
 function detectStore(urlStr) {
   const url = urlStr.toLowerCase();
@@ -55,9 +67,9 @@ app.post('/api/scrape', async (req, res) => {
 
   try {
     const response = await axios.get(url, {
-      headers: AXIOS_HEADERS,
+      headers: getAxiosHeaders(),
       maxRedirects: 10,
-      timeout: 15000,
+      timeout: 8000,
     });
 
     const finalUrl = response.request?.res?.responseUrl || url;
@@ -450,9 +462,9 @@ app.post('/api/deals/search', async (req, res) => {
   try {
     const deals = [];
 
-    const scrapePromises = uniqueUrls.map(async (url, pageIdx) => {
+    const scrapePromises = uniqueUrls.slice(0, 5).map(async (url, pageIdx) => {
       try {
-        const response = await axios.get(url, { headers: AXIOS_HEADERS, timeout: 8000 });
+        const response = await axios.get(url, { headers: getAxiosHeaders(), timeout: 5000 });
         const $ = cheerio.load(response.data);
         const pageDeals = [];
 
