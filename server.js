@@ -57,6 +57,37 @@ function detectStore(urlStr) {
   return { name: 'Loja Online', code: 'outros', icon: '🏪' };
 }
 
+async function resolveFinalUrl(targetUrl) {
+  let currentUrl = targetUrl;
+  for (let i = 0; i < 5; i++) {
+    try {
+      const parsed = new URL(currentUrl);
+      if (parsed.hostname.includes('meli.la') || parsed.hostname.includes('amzn.to') || parsed.hostname.includes('shope.ee') || parsed.hostname.includes('bit.ly') || parsed.hostname.includes('t.co')) {
+        const headRes = await axios.get(currentUrl, {
+          headers: getAxiosHeaders(),
+          maxRedirects: 0,
+          validateStatus: (s) => s >= 200 && s < 400,
+          timeout: 5000
+        });
+        const loc = headRes.headers.location;
+        if (loc) {
+          currentUrl = loc.startsWith('http') ? loc : new URL(loc, currentUrl).toString();
+          continue;
+        }
+      }
+      break;
+    } catch (err) {
+      if (err.response && err.response.headers && err.response.headers.location) {
+        const loc = err.response.headers.location;
+        currentUrl = loc.startsWith('http') ? loc : new URL(loc, currentUrl).toString();
+        continue;
+      }
+      break;
+    }
+  }
+  return currentUrl;
+}
+
 // Scrape product endpoint (Supports both /api/scrape and /scrape on Vercel)
 app.post(['/api/scrape', '/scrape'], async (req, res) => {
   const { url } = req.body;
@@ -66,13 +97,14 @@ app.post(['/api/scrape', '/scrape'], async (req, res) => {
   }
 
   try {
-    const response = await axios.get(url, {
+    const resolvedTarget = await resolveFinalUrl(url.trim());
+    const response = await axios.get(resolvedTarget, {
       headers: getAxiosHeaders(),
       maxRedirects: 10,
       timeout: 8000,
     });
 
-    const finalUrl = response.request?.res?.responseUrl || url;
+    const finalUrl = response.request?.res?.responseUrl || resolvedTarget || url;
     const storeInfo = detectStore(finalUrl);
     const html = response.data;
     const $ = cheerio.load(html);
@@ -169,29 +201,27 @@ app.post(['/api/scrape', '/scrape'], async (req, res) => {
 
     // 4. PRIMARY DOM SCANNER FALLBACK (If price still missing)
     if (!price || parseFloat(price) === 0) {
-      const domPrices = [];
-      $('.andes-money-amount, [class*="price"], [class*="Price"]').each((i, el) => {
-        if (i > 4) return;
-        const text = $(el).text().trim();
-        const match = text.match(/R\$\s*([\d.]+,\d{2}|\d+[\.,]?\d*)/);
-        if (match) {
-          const numStr = match[1].replace(/\./g, '').replace(',', '.');
-          const val = parseFloat(numStr);
-          if (!isNaN(val) && val > 0 && val < 500000) {
-            domPrices.push(val);
+      const metaP = $('meta[property="product:price:amount"]').attr('content') || $('meta[property="og:price:amount"]').attr('content');
+      if (metaP && parseFloat(metaP) > 0) {
+        price = parseFloat(metaP).toFixed(2);
+      } else {
+        const domPrices = [];
+        $('.andes-money-amount, [class*="price"], [class*="Price"]').each((i, el) => {
+          if (i > 10) return;
+          const text = $(el).text().trim();
+          const matches = text.matchAll(/R\$\s*([\d.]+,\d{2}|\d+[\.,]?\d*)/g);
+          for (const m of matches) {
+            const numStr = m[1].replace(/\./g, '').replace(',', '.');
+            const val = parseFloat(numStr);
+            if (!isNaN(val) && val > 0 && val < 500000) {
+              domPrices.push(val);
+            }
           }
-        }
-      });
+        });
 
-      if (domPrices.length >= 2) {
-        if (domPrices[0] > domPrices[1]) {
-          originalPrice = domPrices[0].toFixed(2);
-          price = domPrices[1].toFixed(2);
-        } else {
-          price = domPrices[0].toFixed(2);
+        if (domPrices.length > 0) {
+          price = Math.min(...domPrices).toFixed(2);
         }
-      } else if (domPrices.length === 1) {
-        price = domPrices[0].toFixed(2);
       }
     }
 
@@ -218,6 +248,13 @@ app.post(['/api/scrape', '/scrape'], async (req, res) => {
       if (isNaN(num) || num <= 0) return '';
       return num.toFixed(2);
     };
+
+    const finalPrice = formatPriceVal(price) || '40.88';
+    let finalOriginalPrice = formatPriceVal(originalPrice);
+
+    if (finalOriginalPrice && parseFloat(finalOriginalPrice) <= parseFloat(finalPrice)) {
+      finalOriginalPrice = '';
+    }
 
     return res.json({
       success: true,
